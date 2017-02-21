@@ -32,7 +32,6 @@ node_modules/
 dist/
 dist-test/
 docs/api/
-es5/
 tmp
 test/test-manifests.js
 test/test-expected.js

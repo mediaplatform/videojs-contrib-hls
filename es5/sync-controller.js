@@ -35,7 +35,7 @@ var syncPointStrategies = [
 //                the equivalence display-time 0 === segment-index 0
 {
   name: 'VOD',
-  run: function run(syncController, playlist, duration, currentTimeline) {
+  run: function run(syncController, playlist, duration, currentTimeline, currentTime) {
     if (duration !== Infinity) {
       var syncPoint = {
         time: 0,
@@ -50,7 +50,7 @@ var syncPointStrategies = [
 // Stategy "ProgramDateTime": We have a program-date-time tag in this playlist
 {
   name: 'ProgramDateTime',
-  run: function run(syncController, playlist, duration, currentTimeline) {
+  run: function run(syncController, playlist, duration, currentTimeline, currentTime) {
     if (syncController.datetimeToDisplayTime && playlist.dateTimeObject) {
       var playlistTime = playlist.dateTimeObject.getTime() / 1000;
       var playlistStart = playlistTime + syncController.datetimeToDisplayTime;
@@ -68,53 +68,81 @@ var syncPointStrategies = [
 //                    segment in the current timeline with timing data
 {
   name: 'Segment',
-  run: function run(syncController, playlist, duration, currentTimeline) {
+  run: function run(syncController, playlist, duration, currentTimeline, currentTime) {
     var segments = playlist.segments;
+    var syncPoint = null;
+    var lastDistance = null;
 
-    for (var i = segments.length - 1; i >= 0; i--) {
+    currentTime = currentTime || 0;
+
+    for (var i = 0; i < segments.length; i++) {
       var segment = segments[i];
 
       if (segment.timeline === currentTimeline && typeof segment.start !== 'undefined') {
-        var syncPoint = {
-          time: segment.start,
-          segmentIndex: i
-        };
+        var distance = Math.abs(currentTime - segment.start);
 
-        return syncPoint;
+        // Once the distance begins to increase, we have passed
+        // currentTime and can stop looking for better candidates
+        if (lastDistance !== null && lastDistance < distance) {
+          break;
+        }
+
+        if (!syncPoint || lastDistance === null || lastDistance >= distance) {
+          lastDistance = distance;
+          syncPoint = {
+            time: segment.start,
+            segmentIndex: i
+          };
+        }
       }
     }
-    return null;
+    return syncPoint;
   }
 },
-
 // Stategy "Discontinuity": We have a discontinuity with a known
 //                          display-time
 {
   name: 'Discontinuity',
-  run: function run(syncController, playlist, duration, currentTimeline) {
+  run: function run(syncController, playlist, duration, currentTimeline, currentTime) {
+    var syncPoint = null;
+
+    currentTime = currentTime || 0;
+
     if (playlist.discontinuityStarts.length) {
+      var lastDistance = null;
+
       for (var i = 0; i < playlist.discontinuityStarts.length; i++) {
         var segmentIndex = playlist.discontinuityStarts[i];
         var discontinuity = playlist.discontinuitySequence + i + 1;
+        var discontinuitySync = syncController.discontinuities[discontinuity];
 
-        if (syncController.discontinuities[discontinuity]) {
-          var syncPoint = {
-            time: syncController.discontinuities[discontinuity].time,
-            segmentIndex: segmentIndex
-          };
+        if (discontinuitySync) {
+          var distance = Math.abs(currentTime - discontinuitySync.time);
 
-          return syncPoint;
+          // Once the distance begins to increase, we have passed
+          // currentTime and can stop looking for better candidates
+          if (lastDistance !== null && lastDistance < distance) {
+            break;
+          }
+
+          if (!syncPoint || lastDistance === null || lastDistance >= distance) {
+            lastDistance = distance;
+            syncPoint = {
+              time: discontinuitySync.time,
+              segmentIndex: segmentIndex
+            };
+          }
         }
       }
     }
-    return null;
+    return syncPoint;
   }
 },
 // Stategy "Playlist": We have a playlist with a known mapping of
 //                     segment index to display time
 {
   name: 'Playlist',
-  run: function run(syncController, playlist, duration, currentTimeline) {
+  run: function run(syncController, playlist, duration, currentTimeline, currentTime) {
     if (playlist.syncInfo) {
       var syncPoint = {
         time: playlist.syncInfo.time,
@@ -164,21 +192,49 @@ var SyncController = (function (_videojs$EventTarget) {
 
   _createClass(SyncController, [{
     key: 'getSyncPoint',
-    value: function getSyncPoint(playlist, duration, currentTimeline) {
+    value: function getSyncPoint(playlist, duration, currentTimeline, currentTime) {
+      var syncPoints = [];
+
       // Try to find a sync-point in by utilizing various strategies...
       for (var i = 0; i < syncPointStrategies.length; i++) {
         var strategy = syncPointStrategies[i];
-        var syncPoint = strategy.run(this, playlist, duration, currentTimeline);
+        var syncPoint = strategy.run(this, playlist, duration, currentTimeline, currentTime);
 
         if (syncPoint) {
+          syncPoint.strategy = strategy.name;
+          syncPoints.push({
+            strategy: strategy.name,
+            syncPoint: syncPoint
+          });
           this.logger_('syncPoint found via <' + strategy.name + '>:', syncPoint);
-          return syncPoint;
         }
       }
-      // Otherwise, signal that we need to attempt to get a sync-point
-      // manually by fetching a segment in the playlist and constructing
-      // a sync-point from that information
-      return null;
+
+      if (!syncPoints.length) {
+        // Signal that we need to attempt to get a sync-point manually
+        // by fetching a segment in the playlist and constructing
+        // a sync-point from that information
+        return null;
+      }
+
+      // Now find the sync-point that is closest to the currentTime because
+      // that should result in the most accurate guess about which segment
+      // to fetch
+      var bestSyncPoint = syncPoints[0].syncPoint;
+      var bestDistance = Math.abs(syncPoints[0].syncPoint.time - currentTime);
+      var bestStrategy = syncPoints[0].strategy;
+
+      for (var i = 1; i < syncPoints.length; i++) {
+        var newDistance = Math.abs(syncPoints[i].syncPoint.time - currentTime);
+
+        if (newDistance < bestDistance) {
+          bestDistance = newDistance;
+          bestSyncPoint = syncPoints[i].syncPoint;
+          bestStrategy = syncPoints[i].strategy;
+        }
+      }
+      this.logger_('syncPoint with strategy <' + bestStrategy + '> chosen: ', bestSyncPoint);
+      return bestSyncPoint;
     }
 
     /**
@@ -355,7 +411,7 @@ var SyncController = (function (_videojs$EventTarget) {
       } else {
         return false;
       }
-      this.trigger('syncinfoupdate');
+
       return true;
     }
 
@@ -387,14 +443,21 @@ var SyncController = (function (_videojs$EventTarget) {
         for (var i = 0; i < playlist.discontinuityStarts.length; i++) {
           var segmentIndex = playlist.discontinuityStarts[i];
           var discontinuity = playlist.discontinuitySequence + i + 1;
-          var accuracy = segmentIndex - segmentInfo.mediaIndex;
+          var mediaIndexDiff = segmentIndex - segmentInfo.mediaIndex;
+          var accuracy = Math.abs(mediaIndexDiff);
 
-          if (accuracy > 0 && (!this.discontinuities[discontinuity] || this.discontinuities[discontinuity].accuracy > accuracy)) {
-
-            this.discontinuities[discontinuity] = {
-              time: segment.end + (0, _playlist.sumDurations)(playlist, segmentInfo.mediaIndex + 1, segmentIndex),
-              accuracy: accuracy
-            };
+          if (!this.discontinuities[discontinuity] || this.discontinuities[discontinuity].accuracy > accuracy) {
+            if (mediaIndexDiff < 0) {
+              this.discontinuities[discontinuity] = {
+                time: segment.start - (0, _playlist.sumDurations)(playlist, segmentInfo.mediaIndex, segmentIndex),
+                accuracy: accuracy
+              };
+            } else {
+              this.discontinuities[discontinuity] = {
+                time: segment.end + (0, _playlist.sumDurations)(playlist, segmentInfo.mediaIndex + 1, segmentIndex),
+                accuracy: accuracy
+              };
+            }
           }
         }
       }

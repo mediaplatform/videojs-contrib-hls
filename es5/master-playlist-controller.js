@@ -1025,6 +1025,8 @@ var MasterPlaylistController = (function (_videojs$EventTarget) {
       } else {
         this.seekable_ = _videoJs2['default'].createTimeRanges([[audioSeekable.start(0) > mainSeekable.start(0) ? audioSeekable.start(0) : mainSeekable.start(0), audioSeekable.end(0) < mainSeekable.end(0) ? audioSeekable.end(0) : mainSeekable.end(0)]]);
       }
+
+      this.tech_.trigger('seekablechanged');
     }
 
     /**

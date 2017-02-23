@@ -59,7 +59,11 @@ var PlaybackWatcher = (function () {
     var cancelTimerHandler = function cancelTimerHandler() {
       return _this.cancelTimer_();
     };
+    var fixesBadSeeksHandler = function fixesBadSeeksHandler() {
+      return _this.fixesBadSeeks_();
+    };
 
+    this.tech_.on('seekablechanged', fixesBadSeeksHandler);
     this.tech_.on('waiting', waitingHandler);
     this.tech_.on(timerCancelEvents, cancelTimerHandler);
     this.monitorCurrentTime_();
@@ -67,6 +71,7 @@ var PlaybackWatcher = (function () {
     // Define the dispose function to clean up our events
     this.dispose = function () {
       _this.logger_('dispose');
+      _this.tech_.off('seekablechanged', fixesBadSeeksHandler);
       _this.tech_.off('waiting', waitingHandler);
       _this.tech_.off(timerCancelEvents, cancelTimerHandler);
       if (_this.checkCurrentTimeTimeout_) {

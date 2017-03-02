@@ -255,13 +255,13 @@ var PlaylistLoader = function PlaylistLoader(srcUrl, hls, withCredentials) {
    * @return {Boolean} true if on lowest rendition
    */
   loader.isLowestEnabledRendition_ = function () {
-    var media = loader.media();
-
-    if (!media || !media.attributes) {
-      return false;
+    if (loader.master.playlists.length === 1) {
+      return true;
     }
 
-    var currentBandwidth = media.attributes.BANDWIDTH || 0;
+    var media = loader.media();
+
+    var currentBandwidth = media.attributes.BANDWIDTH || Number.MAX_VALUE;
 
     return loader.master.playlists.filter(function (playlist) {
       var enabled = (0, _playlistJs.isEnabled)(playlist);

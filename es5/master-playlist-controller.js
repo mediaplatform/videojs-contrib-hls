@@ -338,7 +338,13 @@ var MasterPlaylistController = (function (_videojs$EventTarget) {
         var media = _this2.masterPlaylistLoader_.media();
         var requestTimeout = _this2.masterPlaylistLoader_.targetDuration * 1.5 * 1000;
 
-        _this2.requestOptions_.timeout = requestTimeout;
+        // If we don't have any more available playlists, we don't want to
+        // timeout the request.
+        if (_this2.masterPlaylistLoader_.isLowestEnabledRendition_()) {
+          _this2.requestOptions_.timeout = 0;
+        } else {
+          _this2.requestOptions_.timeout = requestTimeout;
+        }
 
         // if this isn't a live video and preload permits, start
         // downloading segments

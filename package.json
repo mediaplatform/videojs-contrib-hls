@@ -8,7 +8,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git@github.com:mediaplatform/videojs-contrib-hls.git"
+    "url": "git@github.com:videojs/videojs-contrib-hls.git"
   },
   "scripts": {
     "prebuild": "npm run clean",
@@ -95,7 +95,7 @@
     "mux.js": "4.1.0",
     "url-toolkit": "1.0.9",
     "video.js": "^5.15.1",
-    "videojs-contrib-media-sources": "git://github.com/mediaplatform/videojs-contrib-media-sources.git#mp-wc4812",
+    "videojs-contrib-media-sources": "git+ssh://git@github.com:mediaplatform/videojs-contrib-media-sources.git#mp-wc4812",
     "webworkify": "1.0.2"
   },
   "devDependencies": {

@@ -90,11 +90,10 @@
   ],
   "dependencies": {
     "aes-decrypter": "1.0.3",
-    "global": "^4.3.0",
+    "global": "4.3.0",
     "m3u8-parser": "2.0.1",
     "mux.js": "4.1.0",
     "url-toolkit": "1.0.9",
-    "video.js": "^5.15.1",
     "videojs-contrib-media-sources": "git+ssh://git@github.com:mediaplatform/videojs-contrib-media-sources.git",
     "webworkify": "1.0.2"
   },
